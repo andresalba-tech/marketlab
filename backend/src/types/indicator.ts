@@ -1,0 +1,31 @@
+export type Candle = {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+export type IndicatorPoint = {
+  time: string;
+  value: number | null;
+};
+
+export type IndicatorSeries = {
+  name: string;
+  points: IndicatorPoint[];
+};
+
+export type IndicatorInput = {
+  candles: Candle[];
+};
+
+export type IndicatorResult = {
+  series: IndicatorSeries[];
+};
+
+export type IndicatorDefinition = {
+  description: string;
+  calculate: (input: IndicatorInput) => IndicatorResult;
+};
