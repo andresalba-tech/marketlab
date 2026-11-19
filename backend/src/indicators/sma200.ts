@@ -32,6 +32,9 @@ const indicator: IndicatorDefinition = {
     }
 
     return {
+      display: {
+        placement: "overlay",
+      },
       series: [
         {
           name: "SMA 200",

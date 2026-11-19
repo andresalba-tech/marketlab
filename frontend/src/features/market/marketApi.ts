@@ -21,6 +21,10 @@ type IndicatorResponse = {
   interval: string;
   source: string;
   indicator: string;
+  display: {
+    placement: "overlay" | "panel";
+    domain?: [number, number];
+  };
   series: {
     name: string;
     points: {

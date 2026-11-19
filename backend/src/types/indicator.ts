@@ -22,10 +22,16 @@ export type IndicatorInput = {
 };
 
 export type IndicatorResult = {
+  display: IndicatorDisplay;
   series: IndicatorSeries[];
 };
 
 export type IndicatorDefinition = {
   description: string;
   calculate: (input: IndicatorInput) => IndicatorResult;
+};
+
+export type IndicatorDisplay = {
+  placement: "overlay" | "panel";
+  domain?: [number, number];
 };

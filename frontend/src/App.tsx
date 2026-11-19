@@ -180,6 +180,8 @@ export default function App() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
+              syncId="market"
+              syncMethod="value"
               margin={{ top: 10, right: 25, bottom: 10, left: 10 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
@@ -199,7 +201,7 @@ export default function App() {
                 dot={false}
                 isAnimationActive={false}
               />
-              {selectedSeries && (
+              {selectedSeries && indicatorData?.display.placement === "overlay" && (
                 <Line
                   type="linear"
                   dataKey="indicatorValue"
@@ -215,6 +217,43 @@ export default function App() {
           </ResponsiveContainer>
         </div>
       </section>
+
+      {selectedSeries && indicatorData?.display.placement === "panel" && (
+        <section aria-label={`Gráfico de ${selectedSeries.name}`}>
+          <h2>{selectedSeries.name}</h2>
+
+          <div style={{ width: "100%", minWidth: 0, height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={chartData}
+                syncId="market"
+                syncMethod="value"
+                margin={{ top: 10, right: 25, bottom: 10, left: 10 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" minTickGap={40} />
+                <YAxis
+                  width={75}
+                  domain={indicatorData?.display.domain ?? ["auto", "auto"]}
+                  tickFormatter={(value: number) => value.toFixed(2)}
+                />
+                <Tooltip />
+
+                <Line
+                  type="linear"
+                  dataKey="indicatorValue"
+                  name={selectedSeries.name}
+                  stroke="#a78bfa"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
 
       <button type="button" onClick={() => dispatch(toggleTable())}>
         {showTable ? "Ocultar tabla" : "Mostrar tabla"}
