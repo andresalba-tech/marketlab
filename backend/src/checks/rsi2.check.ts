@@ -12,7 +12,7 @@ function calculateValues(closes: number[]) {
     volume: 1000,
   }));
 
-  const result = indicator.calculate({ candles });
+  const result = indicator.calculate({ candles, interval: "1d" });
   const series = result.series[0];
 
   assert.ok(series, "Debe existir una serie");

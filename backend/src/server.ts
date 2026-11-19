@@ -4,6 +4,7 @@ import {
   loadIndicator,
 } from "./services/indicatorRegistry.js";
 import { marketFixture } from "./data/marketFixture.js";
+import { getMarketFixture } from "./services/getMarketFixture.js";
 
 const app = express();
 
@@ -15,27 +16,34 @@ app.get("/api/market/:symbol", (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const interval = req.query.interval ?? "1d";
 
-  if (interval !== "1d") {
+  if (typeof interval !== "string") {
     res.status(400).json({
-      error: "La demo solo admite el intervalo 1d",
+      error: "El intervalo debe ser un texto.",
     });
     return;
   }
 
-  if (symbol !== "MSFT") {
+  const fixture = getMarketFixture(interval);
+
+  if (fixture === null) {
+    res.status(400).json({
+      error: "Los intervalos disponibles son 1d y 5m.",
+    });
+    return;
+  }
+
+  if (symbol !== fixture.symbol) {
     res.status(404).json({
-      error: "La demo solo tiene datos de MSFT",
+      error: "La demo solo tiene datos de MSFT.",
     });
     return;
   }
-
-  const candles = marketFixture.candles;
 
   res.json({
     symbol,
-    interval,
-    source: "fixture",
-    candles,
+    interval: fixture.interval,
+    source: fixture.source,
+    candles: fixture.candles,
   });
 });
 
@@ -82,10 +90,27 @@ app.get("/api/market/:symbol/indicators/:name", async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const name = req.params.name;
+    const interval = req.query.interval ?? "1d";
 
-    if (symbol !== marketFixture.symbol) {
+    if (typeof interval !== "string") {
+      res.status(400).json({
+        error: "El intervalo debe ser un texto.",
+      });
+      return;
+    }
+
+    const fixture = getMarketFixture(interval);
+
+    if (fixture === null) {
+      res.status(400).json({
+        error: "Los intervalos disponibles son 1d y 5m.",
+      });
+      return;
+    }
+
+    if (symbol !== fixture.symbol) {
       res.status(404).json({
-        error: "La demo solo tiene datos de MSFT",
+        error: "La demo solo tiene datos de MSFT.",
       });
       return;
     }
@@ -94,19 +119,20 @@ app.get("/api/market/:symbol/indicators/:name", async (req, res) => {
 
     if (indicator === null) {
       res.status(404).json({
-        error: "Indicador no encontrado",
+        error: "Indicador no encontrado.",
       });
       return;
     }
 
     const result = indicator.calculate({
-      candles: marketFixture.candles,
+      candles: fixture.candles,
+      interval: fixture.interval,
     });
 
     res.json({
       symbol,
-      interval: marketFixture.interval,
-      source: marketFixture.source,
+      interval: fixture.interval,
+      source: fixture.source,
       indicator: name,
       ...result,
     });
@@ -114,7 +140,7 @@ app.get("/api/market/:symbol/indicators/:name", async (req, res) => {
     console.error("No se pudo calcular el indicador:", error);
 
     res.status(500).json({
-      error: "No se pudo calcular el indicador",
+      error: "No se pudo calcular el indicador.",
     });
   }
 });

@@ -5,6 +5,7 @@ export type Candle = {
   low: number;
   close: number;
   volume: number;
+  session?: string;
 };
 
 export type IndicatorPoint = {
@@ -19,6 +20,7 @@ export type IndicatorSeries = {
 
 export type IndicatorInput = {
   candles: Candle[];
+  interval: string;
 };
 
 export type IndicatorResult = {

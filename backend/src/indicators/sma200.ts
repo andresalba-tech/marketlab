@@ -8,7 +8,10 @@ const PERIOD = 200;
 const indicator: IndicatorDefinition = {
   description: "Media móvil simple de los últimos 200 cierres diarios.",
 
-  calculate({ candles }) {
+  calculate({ candles, interval }) {
+    if (interval !== "1d") {
+      throw new Error("SMA 200 requiere velas diarias: intervalo 1d.");
+    }
     const points: IndicatorPoint[] = [];
     let sum = 0;
 

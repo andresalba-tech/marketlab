@@ -26,7 +26,7 @@ while (candles.length < 201) {
   date.setUTCDate(date.getUTCDate() + 1);
 }
 
-const result = indicator.calculate({ candles });
+const result = indicator.calculate({ candles, interval: "1d" });
 const series = result.series[0];
 
 assert.ok(series, "Debe existir una serie de resultados");
@@ -44,7 +44,11 @@ assert.equal(series.points[199]?.value, 100.5);
 assert.equal(series.points[200]?.value, 101.5);
 
 // Sin velas, la serie debe estar vacía.
-const emptyResult = indicator.calculate({ candles: [] });
+const emptyResult = indicator.calculate({ candles: [], interval: "1d" });
 assert.deepEqual(emptyResult.series[0]?.points, []);
 
+assert.throws(
+  () => indicator.calculate({ candles, interval: "1h" }),
+  /SMA 200 requiere velas diarias/,
+);
 console.log("SMA 200: todas las comprobaciones pasaron.");

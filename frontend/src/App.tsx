@@ -11,6 +11,7 @@ import { useAppDispatch, useAppSelector } from "./app/hooks";
 import {
   toggleTable,
   setSelectedIndicator,
+  setSelectedInterval,
 } from "./features/market/marketUiSlice";
 import {
   useGetMarketQuery,
@@ -26,8 +27,20 @@ export default function App() {
     (state) => state.marketUi.selectedIndicator,
   );
 
-  const { data, isLoading, isFetching, isError, refetch } =
-    useGetMarketQuery("MSFT");
+  const selectedInterval = useAppSelector(
+    (state) => state.marketUi.selectedInterval,
+  );
+
+  const {
+    currentData: data,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useGetMarketQuery({
+    symbol: "MSFT",
+    interval: selectedInterval,
+  });
 
   const {
     data: availableIndicators,
@@ -52,13 +65,14 @@ export default function App() {
     {
       symbol: "MSFT",
       name: activeIndicator,
+      interval: selectedInterval,
     },
     {
       skip: activeIndicator === "",
     },
   );
 
-  if (isLoading) {
+  if (isLoading || (isFetching && !data)) {
     return <p>Cargando precios...</p>;
   }
 
@@ -97,6 +111,21 @@ export default function App() {
     <main>
       <h1>MarketLab — {data.symbol}</h1>
       <p>Intervalo: {data.interval} · Datos simulados</p>
+
+      <div>
+        <label htmlFor="interval-select">Intervalo: </label>
+
+        <select
+          id="interval-select"
+          value={selectedInterval}
+          onChange={(event) =>
+            dispatch(setSelectedInterval(event.target.value))
+          }
+        >
+          <option value="1d">Diario</option>
+          <option value="5m">5 minutos</option>
+        </select>
+      </div>
 
       <section aria-label="Indicadores disponibles">
         <h2>Indicadores disponibles</h2>
