@@ -47,10 +47,15 @@ export const marketApi = createApi({
             query: ({ symbol, name }) =>
             `market/${encodeURIComponent(symbol)}/indicators/${encodeURIComponent(name)}`,
         }),
+
+        getIndicators: builder.query<{ indicators: string[] }, void>({
+            query: () => "indicators",
+        }),
     }),
 });
 
 export const {
   useGetMarketQuery,
   useGetIndicatorQuery,
+  useGetIndicatorsQuery,
 } = marketApi;

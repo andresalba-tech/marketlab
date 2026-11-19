@@ -8,27 +8,55 @@ import {
   YAxis,
 } from "recharts";
 import { useAppDispatch, useAppSelector } from "./app/hooks";
-import { toggleTable } from "./features/market/marketUiSlice";
+import {
+  toggleTable,
+  setSelectedIndicator,
+} from "./features/market/marketUiSlice";
 import {
   useGetMarketQuery,
   useGetIndicatorQuery,
+  useGetIndicatorsQuery,
 } from "./features/market/marketApi";
 
 export default function App() {
   const dispatch = useAppDispatch();
-  const showTable = useAppSelector((state) => state.marketUi.showTable);
 
-  const { data, isLoading, isFetching, isError, refetch } = useGetMarketQuery("MSFT");
+  const showTable = useAppSelector((state) => state.marketUi.showTable);
+  const selectedIndicator = useAppSelector(
+    (state) => state.marketUi.selectedIndicator,
+  );
+
+  const { data, isLoading, isFetching, isError, refetch } =
+    useGetMarketQuery("MSFT");
 
   const {
-    data: indicatorData,
+    data: availableIndicators,
+    isLoading: isListLoading,
+    isError: isListError,
+    isFetching: isListFetching,
+    refetch: refetchList,
+  } = useGetIndicatorsQuery();
+
+  const indicatorNames = availableIndicators?.indicators ?? [];
+
+  const activeIndicator = indicatorNames.includes(selectedIndicator)
+    ? selectedIndicator
+    : "";
+
+  const {
+    currentData: indicatorData,
     isFetching: isIndicatorFetching,
     isError: isIndicatorError,
     refetch: refetchIndicator,
-  } = useGetIndicatorQuery({
-    symbol: "MSFT",
-    name: "sma200",
-  });
+  } = useGetIndicatorQuery(
+    {
+      symbol: "MSFT",
+      name: activeIndicator,
+    },
+    {
+      skip: activeIndicator === "",
+    },
+  );
 
   if (isLoading) {
     return <p>Cargando precios...</p>;
@@ -49,15 +77,20 @@ export default function App() {
     return <p>No hay precios disponibles.</p>;
   }
 
-  const smaPoints = indicatorData?.series[0]?.points ?? [];
+  const selectedSeries = activeIndicator
+    ? indicatorData?.series[0]
+    : undefined;
 
-  const smaByDate = new Map(
-    smaPoints.map((point) => [point.time, point.value]),
+  const valuesByDate = new Map(
+    (selectedSeries?.points ?? []).map((point) => [
+      point.time,
+      point.value,
+    ]),
   );
 
   const chartData = data.candles.map((candle) => ({
     ...candle,
-    sma200: smaByDate.get(candle.time) ?? null,
+    indicatorValue: valuesByDate.get(candle.time) ?? null,
   }));
   
   return (
@@ -65,27 +98,73 @@ export default function App() {
       <h1>MarketLab — {data.symbol}</h1>
       <p>Intervalo: {data.interval} · Datos simulados</p>
 
-    <button
-      type="button"
-      onClick={() => {
-        refetch();
-        refetchIndicator();
-      }}
-      disabled={isFetching || isIndicatorFetching}
-    >
-      {isFetching || isIndicatorFetching
-        ? "Actualizando..."
-        : "Actualizar precios e indicador"}
-    </button>
+      <section aria-label="Indicadores disponibles">
+        <h2>Indicadores disponibles</h2>
 
-    {isIndicatorError && (
-      <p role="alert">
-        No se pudo actualizar la SMA 200.
-        {indicatorData
-          ? " Se conserva el último resultado recibido."
-          : " El indicador no está disponible."}
-      </p>
-    )}
+        <button
+          type="button"
+          onClick={() => refetchList()}
+          disabled={isListFetching}
+        >
+          {isListFetching ? "Buscando..." : "Actualizar lista"}
+        </button>
+
+        {isListLoading && <p>Cargando indicadores...</p>}
+
+        {isListError && (
+          <p role="alert">
+            No se pudo actualizar la lista de indicadores.
+          </p>
+        )}
+
+        <label htmlFor="indicator-select">Indicador: </label>
+
+        <select
+          id="indicator-select"
+          value={activeIndicator}
+          onChange={(event) =>
+            dispatch(setSelectedIndicator(event.target.value))
+          }
+          disabled={isListLoading}
+        >
+          <option value="">Sin indicador</option>
+
+          {indicatorNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+
+        {availableIndicators && indicatorNames.length === 0 && (
+          <p>No hay indicadores disponibles.</p>
+        )}
+      </section>
+
+      <button
+        type="button"
+        onClick={() => {
+          refetch();
+
+          if (activeIndicator) {
+            refetchIndicator();
+          }
+        }}
+        disabled={isFetching || isIndicatorFetching}
+      >
+        {isFetching || isIndicatorFetching
+          ? "Actualizando..."
+          : "Actualizar precios e indicador"}
+      </button>
+
+      {activeIndicator && isIndicatorError && (
+        <p role="alert">
+          No se pudo actualizar el indicador {activeIndicator}.
+          {indicatorData
+            ? " Se conserva el último resultado recibido."
+            : " El indicador no está disponible."}
+        </p>
+      )}
 
       {isError && (
         <p role="alert">
@@ -120,16 +199,18 @@ export default function App() {
                 dot={false}
                 isAnimationActive={false}
               />
-              <Line
-                type="linear"
-                dataKey="sma200"
-                name="SMA 200"
-                stroke="#f97316"
-                strokeWidth={2}
-                dot={false}
-                connectNulls={false}
-                isAnimationActive={false}
-              />
+              {selectedSeries && (
+                <Line
+                  type="linear"
+                  dataKey="indicatorValue"
+                  name={selectedSeries.name}
+                  stroke="#f97316"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
