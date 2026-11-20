@@ -7,6 +7,8 @@ const indicator: IndicatorDefinition = {
   description:
     "VWAP por sesión, aproximado con precio típico y volumen de velas intradía.",
 
+  supportedIntervals: ["1m", "5m", "15m", "30m", "1h"],
+
   calculate({ candles, interval }) {
     const supportedIntervals = ["1m", "5m", "15m", "30m", "1h"];
 

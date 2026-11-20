@@ -63,8 +63,11 @@ export const marketApi = createApi({
           }),
         }),
 
-        getIndicators: builder.query<{ indicators: string[] }, void>({
-            query: () => "indicators",
+        getIndicators: builder.query<{ indicators: string[] }, string>({
+          query: (interval) => ({
+            url: "indicators",
+            params: { interval },
+          }),
         }),
     }),
 });

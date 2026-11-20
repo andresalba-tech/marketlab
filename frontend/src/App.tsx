@@ -43,12 +43,12 @@ export default function App() {
   });
 
   const {
-    data: availableIndicators,
+    currentData: availableIndicators,
     isLoading: isListLoading,
     isError: isListError,
     isFetching: isListFetching,
     refetch: refetchList,
-  } = useGetIndicatorsQuery();
+  } = useGetIndicatorsQuery(selectedInterval);
 
   const indicatorNames = availableIndicators?.indicators ?? [];
 
@@ -154,7 +154,7 @@ export default function App() {
           onChange={(event) =>
             dispatch(setSelectedIndicator(event.target.value))
           }
-          disabled={isListLoading}
+          disabled={isListFetching}
         >
           <option value="">Sin indicador</option>
 

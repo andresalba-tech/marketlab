@@ -8,6 +8,8 @@ const PERIOD = 2;
 const indicator: IndicatorDefinition = {
   description: "RSI de 2 períodos con suavizado de Wilder.",
 
+  supportedIntervals: ["1m", "5m", "15m", "30m", "1h", "1d"],
+
   calculate({ candles }) {
     const points: IndicatorPoint[] = [];
 

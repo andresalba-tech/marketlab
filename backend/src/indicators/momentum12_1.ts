@@ -10,6 +10,8 @@ const indicator: IndicatorDefinition = {
   description:
     "Momentum 12-1: aproximación de 252 y 21 sesiones, expresada en porcentaje.",
 
+    supportedIntervals: ["1d"],
+
   calculate({ candles, interval }) {
     if (interval !== "1d") {
         throw new Error("Momentum 12-1 requiere velas diarias: intervalo 1d.");

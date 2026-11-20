@@ -30,6 +30,7 @@ export type IndicatorResult = {
 
 export type IndicatorDefinition = {
   description: string;
+  supportedIntervals: string[];
   calculate: (input: IndicatorInput) => IndicatorResult;
 };
 
