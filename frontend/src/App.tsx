@@ -14,6 +14,7 @@ import { IntervalSelector } from "./features/market/components/IntervalSelector"
 import { IndicatorSelector } from "./features/market/components/IndicatorSelector";
 import { PriceChart } from "./features/market/components/PriceChart";
 import { IndicatorPanel } from "./features/market/components/IndicatorPanel";
+import { buildChartData } from "./features/market/buildChartData";
 
 export default function App() {
   const dispatch = useAppDispatch();
@@ -91,22 +92,18 @@ export default function App() {
     ? indicatorData?.series[0]
     : undefined;
 
-  const valuesByDate = new Map(
-    (selectedSeries?.points ?? []).map((point) => [
-      point.time,
-      point.value,
-    ]),
+  const chartData = buildChartData(
+    data.candles,
+    selectedSeries?.points ?? [],
   );
-
-  const chartData = data.candles.map((candle) => ({
-    ...candle,
-    indicatorValue: valuesByDate.get(candle.time) ?? null,
-  }));
   
   return (
     <main>
       <h1>MarketLab — {data.symbol}</h1>
-      <p>Intervalo: {data.interval} · Datos simulados</p>
+      <p>
+        Intervalo: {data.interval} · Datos simulados
+        {data.interval !== "1d" && " · Horas en UTC"}
+      </p>
 
       <IntervalSelector
         value={selectedInterval}

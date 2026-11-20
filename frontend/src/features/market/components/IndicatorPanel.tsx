@@ -7,6 +7,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatChartTime } from "../formatChartTime";
 
 type IndicatorPanelProps = {
   data: {
@@ -35,7 +36,11 @@ export function IndicatorPanel({
             margin={{ top: 10, right: 25, bottom: 10, left: 10 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="time" minTickGap={40} />
+            <XAxis
+              dataKey="time"
+              tickFormatter={formatChartTime}
+              minTickGap={40}
+            />
             <YAxis
               width={75}
               domain={domain ?? ["auto", "auto"]}

@@ -1,5 +1,6 @@
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -7,10 +8,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Candle } from "../marketApi";
+import type { MarketChartPoint } from "../buildChartData";
+import { formatChartTime } from "../formatChartTime";
 
 type PriceChartProps = {
-  data: (Candle & { indicatorValue: number | null })[];
+  data: MarketChartPoint[];
   overlayName: string | null;
 };
 
@@ -31,13 +33,18 @@ export function PriceChart({
             margin={{ top: 10, right: 25, bottom: 10, left: 10 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="time" />
+            <XAxis
+              dataKey="time"
+              tickFormatter={formatChartTime}
+              minTickGap={40}
+            />
             <YAxis
               domain={["dataMin - 5", "dataMax + 5"]}
               width={75}
               tickFormatter={(value: number) => value.toFixed(2)}
             />
             <Tooltip />
+            <Legend />
 
             <Line
               type="linear"
