@@ -15,6 +15,7 @@ import { IndicatorSelector } from "./features/market/components/IndicatorSelecto
 import { PriceChart } from "./features/market/components/PriceChart";
 import { IndicatorPanel } from "./features/market/components/IndicatorPanel";
 import { buildChartData } from "./features/market/buildChartData";
+import { MarketStatus } from "./features/market/components/MarketStatus";
 
 export default function App() {
   const dispatch = useAppDispatch();
@@ -41,7 +42,6 @@ export default function App() {
 
   const {
     currentData: availableIndicators,
-    isLoading: isListLoading,
     isError: isListError,
     isFetching: isListFetching,
     refetch: refetchList,
@@ -70,22 +70,66 @@ export default function App() {
   );
 
   if (isLoading || (isFetching && !data)) {
-    return <p>Cargando precios...</p>;
+    return (
+      <MarketStatus
+        interval={selectedInterval}
+        onIntervalChange={(interval) =>
+          dispatch(setSelectedInterval(interval))
+        }
+      >
+        <p role="status">
+          Cargando precios del intervalo {selectedInterval}...
+        </p>
+      </MarketStatus>
+    );
   }
 
   if (isError && !data) {
     return (
-      <div role="alert">
-        <p>No se pudieron cargar los datos.</p>
-        <button type="button" onClick={() => refetch()}>
+      <MarketStatus
+        interval={selectedInterval}
+        onIntervalChange={(interval) =>
+          dispatch(setSelectedInterval(interval))
+        }
+      >
+        <p role="alert">
+          No se pudieron cargar los precios del intervalo
+          {" "}{selectedInterval}.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+        >
           Reintentar
         </button>
-      </div>
+      </MarketStatus>
     );
   }
 
   if (!data || data.candles.length === 0) {
-    return <p>No hay precios disponibles.</p>;
+    return (
+      <MarketStatus
+        interval={selectedInterval}
+        onIntervalChange={(interval) =>
+          dispatch(setSelectedInterval(interval))
+        }
+      >
+        <p role="status">
+          No hay precios disponibles para el intervalo
+          {" "}{selectedInterval}.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+        >
+          {isFetching ? "Actualizando..." : "Actualizar precios"}
+        </button>
+      </MarketStatus>
+    );
   }
 
   const selectedSeries = activeIndicator
@@ -123,7 +167,13 @@ export default function App() {
           {isListFetching ? "Buscando..." : "Actualizar lista"}
         </button>
 
-        {isListLoading && <p>Cargando indicadores...</p>}
+        {isListFetching && (
+          <p role="status">
+            {availableIndicators
+              ? "Actualizando indicadores..."
+              : "Cargando indicadores..."}
+          </p>
+        )}
 
         {isListError && (
           <p role="alert">
@@ -160,6 +210,14 @@ export default function App() {
           ? "Actualizando..."
           : "Actualizar precios e indicador"}
       </button>
+
+      {activeIndicator && isIndicatorFetching && (
+        <p role="status">
+          {indicatorData
+            ? `Actualizando ${activeIndicator}...`
+            : `Cargando ${activeIndicator}...`}
+        </p>
+      )}
 
       {activeIndicator && isIndicatorError && (
         <p role="alert">
