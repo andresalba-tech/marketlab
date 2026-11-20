@@ -21,7 +21,7 @@ export async function listIndicators(): Promise<string[]> {
     .sort();
 }
 
-function isIndicatorDefinition(
+export function isIndicatorDefinition(
   value: unknown,
 ): value is IndicatorDefinition {
   if (typeof value !== "object" || value === null) {
@@ -31,6 +31,14 @@ function isIndicatorDefinition(
   return (
     "description" in value &&
     typeof value.description === "string" &&
+    "supportedIntervals" in value &&
+    Array.isArray(value.supportedIntervals) &&
+    value.supportedIntervals.length > 0 &&
+    value.supportedIntervals.every(
+      (interval: unknown) =>
+        typeof interval === "string" &&
+        interval.trim().length > 0,
+    ) &&
     "calculate" in value &&
     typeof value.calculate === "function"
   );

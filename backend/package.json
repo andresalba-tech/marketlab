@@ -10,7 +10,10 @@
     "test:rsi": "tsx src/checks/rsi2.check.ts",
     "test:momentum": "tsx src/checks/momentum12_1.check.ts",
     "test:vwap": "tsx src/checks/vwap.check.ts",
-    "test": "npm run typecheck && npm run test:sma && npm run test:rsi && npm run test:momentum && npm run test:vwap"
+    "test:definition": "tsx src/checks/indicatorDefinition.check.ts",
+    "test:api": "tsx src/checks/api.check.ts",
+    "test:registry": "tsx src/checks/indicatorRegistry.check.ts",
+    "test": "npm run typecheck && npm run test:sma && npm run test:rsi && npm run test:momentum && npm run test:vwap && npm run test:definition && npm run test:registry && npm run test:api"
   },
   "keywords": [],
   "author": "",
