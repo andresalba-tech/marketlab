@@ -11,9 +11,10 @@
     "test:momentum": "tsx src/checks/momentum12_1.check.ts",
     "test:vwap": "tsx src/checks/vwap.check.ts",
     "test:definition": "tsx src/checks/indicatorDefinition.check.ts",
+    "test:market": "tsx src/checks/marketData.check.ts",
     "test:api": "tsx src/checks/api.check.ts",
     "test:registry": "tsx src/checks/indicatorRegistry.check.ts",
-    "test": "npm run typecheck && npm run test:sma && npm run test:rsi && npm run test:momentum && npm run test:vwap && npm run test:definition && npm run test:registry && npm run test:api"
+    "test": "npm run typecheck && npm run test:sma && npm run test:rsi && npm run test:momentum && npm run test:vwap && npm run test:definition && npm run test:registry && npm run test:market && npm run test:api"
   },
   "keywords": [],
   "author": "",

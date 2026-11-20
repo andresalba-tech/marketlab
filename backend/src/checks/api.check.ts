@@ -75,6 +75,92 @@ try {
   assert.deepEqual(dailyListBody, {
     indicators: ["momentum12_1", "rsi2", "sma200"],
   });
+
+  // Segundo símbolo (AAPL) disponible en la demo.
+  const aaplResponse = await fetch(
+    `${baseUrl}/api/market/AAPL?interval=1d`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(aaplResponse.status, 200);
+
+  const aaplBody = (await aaplResponse.json()) as {
+    symbol: string;
+    interval: string;
+    source: string;
+    candles: { time: string; close: number }[];
+  };
+
+  assert.equal(aaplBody.symbol, "AAPL");
+  assert.equal(aaplBody.interval, "1d");
+  assert.equal(aaplBody.source, "fixture");
+  assert.equal(aaplBody.candles.length, 300);
+
+  // Símbolo inexistente devuelve 404.
+  const missingSymbolResponse = await fetch(
+    `${baseUrl}/api/market/TSLA?interval=1d`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+  assert.equal(missingSymbolResponse.status, 404);
+
+  // Fechas inválidas o invertidas devuelven 400.
+  const invalidDateResponse = await fetch(
+    `${baseUrl}/api/market/MSFT?interval=1d&from=2026-02-30`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+  assert.equal(invalidDateResponse.status, 400);
+
+  const invertedRangeResponse = await fetch(
+    `${baseUrl}/api/market/MSFT?interval=1d&from=2025-12-01&to=2025-11-01`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+  assert.equal(invertedRangeResponse.status, 400);
+
+  // SMA 200 con rango tardío conserva el calentamiento calculado sobre todo el historial.
+  const fullSmaResponse = await fetch(
+    `${baseUrl}/api/market/MSFT/indicators/sma200?interval=1d`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+  assert.equal(fullSmaResponse.status, 200);
+
+  const fullSmaBody = (await fullSmaResponse.json()) as {
+    series: { points: { time: string; value: number | null }[] }[];
+  };
+  const fullPoints = fullSmaBody.series[0]?.points ?? [];
+  const lastThirty = fullPoints.slice(-30);
+  const lateFrom = lastThirty[0]?.time;
+
+  assert.ok(lateFrom, "Debe existir una fecha para probar el rango tardío.");
+
+  const rangedSmaResponse = await fetch(
+    `${baseUrl}/api/market/MSFT/indicators/sma200?interval=1d&from=${encodeURIComponent(lateFrom)}`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+  assert.equal(rangedSmaResponse.status, 200);
+
+  const rangedSmaBody = (await rangedSmaResponse.json()) as {
+    series: { points: { time: string; value: number | null }[] }[];
+  };
+  const rangedPoints = rangedSmaBody.series[0]?.points ?? [];
+
+  assert.equal(rangedPoints.length, lastThirty.length);
+  assert.ok(
+    rangedPoints.every((point) => typeof point.value === "number"),
+    "SMA 200 con rango tardío debe conservar valores calculados, no null.",
+  );
+  assert.deepEqual(rangedPoints, lastThirty);
 } finally {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
