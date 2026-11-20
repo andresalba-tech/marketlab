@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
-type Candle = {
+export type Candle = {
   time: string;
   open: number;
   high: number;

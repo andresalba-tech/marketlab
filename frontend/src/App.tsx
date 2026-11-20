@@ -1,12 +1,3 @@
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { useAppDispatch, useAppSelector } from "./app/hooks";
 import {
   toggleTable,
@@ -18,6 +9,11 @@ import {
   useGetIndicatorQuery,
   useGetIndicatorsQuery,
 } from "./features/market/marketApi";
+import { MarketTable } from "./features/market/components/MarketTable";
+import { IntervalSelector } from "./features/market/components/IntervalSelector";
+import { IndicatorSelector } from "./features/market/components/IndicatorSelector";
+import { PriceChart } from "./features/market/components/PriceChart";
+import { IndicatorPanel } from "./features/market/components/IndicatorPanel";
 
 export default function App() {
   const dispatch = useAppDispatch();
@@ -112,20 +108,12 @@ export default function App() {
       <h1>MarketLab — {data.symbol}</h1>
       <p>Intervalo: {data.interval} · Datos simulados</p>
 
-      <div>
-        <label htmlFor="interval-select">Intervalo: </label>
-
-        <select
-          id="interval-select"
-          value={selectedInterval}
-          onChange={(event) =>
-            dispatch(setSelectedInterval(event.target.value))
-          }
-        >
-          <option value="1d">Diario</option>
-          <option value="5m">5 minutos</option>
-        </select>
-      </div>
+      <IntervalSelector
+        value={selectedInterval}
+        onChange={(interval) =>
+          dispatch(setSelectedInterval(interval))
+        }
+      />
 
       <section aria-label="Indicadores disponibles">
         <h2>Indicadores disponibles</h2>
@@ -146,24 +134,14 @@ export default function App() {
           </p>
         )}
 
-        <label htmlFor="indicator-select">Indicador: </label>
-
-        <select
-          id="indicator-select"
+        <IndicatorSelector
+          names={indicatorNames}
           value={activeIndicator}
-          onChange={(event) =>
-            dispatch(setSelectedIndicator(event.target.value))
-          }
           disabled={isListFetching}
-        >
-          <option value="">Sin indicador</option>
-
-          {indicatorNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+          onChange={(name) =>
+            dispatch(setSelectedIndicator(name))
+          }
+        />
 
         {availableIndicators && indicatorNames.length === 0 && (
           <p>No hay indicadores disponibles.</p>
@@ -202,119 +180,28 @@ export default function App() {
         </p>
       )}
 
-      <section aria-label="Gráfico de precios de cierre">
-        <h2>Precio de cierre</h2>
-
-        <div style={{ width: "100%", minWidth: 0, height: 300 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              syncId="market"
-              syncMethod="value"
-              margin={{ top: 10, right: 25, bottom: 10, left: 10 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" />
-              <YAxis
-                domain={["dataMin - 5", "dataMax + 5"]}
-                width={75}
-                tickFormatter={(value: number) => value.toFixed(2)}
-              />
-              <Tooltip />
-              <Line
-                type="linear"
-                dataKey="close"
-                name="Precio de cierre"
-                stroke="#38bdf8"
-                strokeWidth={2}
-                dot={false}
-                isAnimationActive={false}
-              />
-              {selectedSeries && indicatorData?.display.placement === "overlay" && (
-                <Line
-                  type="linear"
-                  dataKey="indicatorValue"
-                  name={selectedSeries.name}
-                  stroke="#f97316"
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls={false}
-                  isAnimationActive={false}
-                />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <PriceChart
+        data={chartData}
+        overlayName={
+          indicatorData?.display.placement === "overlay"
+            ? selectedSeries?.name ?? null
+            : null
+        }
+      />
 
       {selectedSeries && indicatorData?.display.placement === "panel" && (
-        <section aria-label={`Gráfico de ${selectedSeries.name}`}>
-          <h2>{selectedSeries.name}</h2>
-
-          <div style={{ width: "100%", minWidth: 0, height: 220 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={chartData}
-                syncId="market"
-                syncMethod="value"
-                margin={{ top: 10, right: 25, bottom: 10, left: 10 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" minTickGap={40} />
-                <YAxis
-                  width={75}
-                  domain={indicatorData?.display.domain ?? ["auto", "auto"]}
-                  tickFormatter={(value: number) => value.toFixed(2)}
-                />
-                <Tooltip />
-
-                <Line
-                  type="linear"
-                  dataKey="indicatorValue"
-                  name={selectedSeries.name}
-                  stroke="#a78bfa"
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+        <IndicatorPanel
+          data={chartData}
+          name={selectedSeries.name}
+          domain={indicatorData.display.domain}
+        />
       )}
 
       <button type="button" onClick={() => dispatch(toggleTable())}>
         {showTable ? "Ocultar tabla" : "Mostrar tabla"}
       </button>
 
-      {showTable && (
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Fecha</th>
-              <th scope="col">Apertura</th>
-              <th scope="col">Máximo</th>
-              <th scope="col">Mínimo</th>
-              <th scope="col">Cierre</th>
-              <th scope="col">Volumen</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {data.candles.map((candle) => (
-              <tr key={candle.time}>
-                <td>{candle.time}</td>
-                <td>{candle.open}</td>
-                <td>{candle.high}</td>
-                <td>{candle.low}</td>
-                <td>{candle.close}</td>
-                <td>{candle.volume.toLocaleString("es-CO")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {showTable && <MarketTable candles={data.candles} />}
     </main>
   );
 }
