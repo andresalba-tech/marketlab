@@ -3,6 +3,8 @@ import {
   toggleTable,
   setSelectedIndicator,
   setSelectedInterval,
+  setSelectedSymbol,
+  setDateRange,
 } from "./features/market/marketUiSlice";
 import {
   useGetMarketQuery,
@@ -16,11 +18,20 @@ import { PriceChart } from "./features/market/components/PriceChart";
 import { IndicatorPanel } from "./features/market/components/IndicatorPanel";
 import { buildChartData } from "./features/market/buildChartData";
 import { MarketStatus } from "./features/market/components/MarketStatus";
+import { SymbolSelector } from "./features/market/components/SymbolSelector";
+import { DateRangeSelector } from "./features/market/components/DateRangeSelector";
 
 export default function App() {
-  const dispatch = useAppDispatch();
+    const dispatch = useAppDispatch();
 
-  const showTable = useAppSelector((state) => state.marketUi.showTable);
+  const selectedSymbol = useAppSelector(
+    (state) => state.marketUi.selectedSymbol,
+  );
+
+  const showTable = useAppSelector(
+    (state) => state.marketUi.showTable,
+  );
+
   const selectedIndicator = useAppSelector(
     (state) => state.marketUi.selectedIndicator,
   );
@@ -29,6 +40,15 @@ export default function App() {
     (state) => state.marketUi.selectedInterval,
   );
 
+  const dateRange = useAppSelector(
+    (state) => state.marketUi.dateRange,
+  );
+
+  const rangeParams = {
+    ...(dateRange.from ? { from: dateRange.from } : {}),
+    ...(dateRange.to ? { to: dateRange.to } : {}),
+  };
+
   const {
     currentData: data,
     isLoading,
@@ -36,8 +56,9 @@ export default function App() {
     isError,
     refetch,
   } = useGetMarketQuery({
-    symbol: "MSFT",
+    symbol: selectedSymbol,
     interval: selectedInterval,
+    ...rangeParams,
   });
 
   const {
@@ -60,23 +81,37 @@ export default function App() {
     refetch: refetchIndicator,
   } = useGetIndicatorQuery(
     {
-      symbol: "MSFT",
+      symbol: selectedSymbol,
       name: activeIndicator,
       interval: selectedInterval,
+      ...rangeParams,
     },
     {
       skip: activeIndicator === "",
     },
   );
 
+  const dateRangeControl = (
+    <DateRangeSelector
+      key={`${dateRange.from}:${dateRange.to}`}
+      value={dateRange}
+      onApply={(range) => dispatch(setDateRange(range))}
+    />
+  );
+
   if (isLoading || (isFetching && !data)) {
     return (
       <MarketStatus
+        symbol={selectedSymbol}
+        onSymbolChange={(symbol) =>
+          dispatch(setSelectedSymbol(symbol))
+        }
         interval={selectedInterval}
         onIntervalChange={(interval) =>
           dispatch(setSelectedInterval(interval))
         }
       >
+        {dateRangeControl}
         <p role="status">
           Cargando precios del intervalo {selectedInterval}...
         </p>
@@ -87,11 +122,16 @@ export default function App() {
   if (isError && !data) {
     return (
       <MarketStatus
+        symbol={selectedSymbol}
+        onSymbolChange={(symbol) =>
+          dispatch(setSelectedSymbol(symbol))
+        }
         interval={selectedInterval}
         onIntervalChange={(interval) =>
           dispatch(setSelectedInterval(interval))
         }
       >
+        {dateRangeControl}
         <p role="alert">
           No se pudieron cargar los precios del intervalo
           {" "}{selectedInterval}.
@@ -111,11 +151,16 @@ export default function App() {
   if (!data || data.candles.length === 0) {
     return (
       <MarketStatus
+        symbol={selectedSymbol}
+        onSymbolChange={(symbol) =>
+          dispatch(setSelectedSymbol(symbol))
+        }
         interval={selectedInterval}
         onIntervalChange={(interval) =>
           dispatch(setSelectedInterval(interval))
         }
       >
+        {dateRangeControl}
         <p role="status">
           No hay precios disponibles para el intervalo
           {" "}{selectedInterval}.
@@ -149,12 +194,19 @@ export default function App() {
         {data.interval !== "1d" && " · Horas en UTC"}
       </p>
 
+      <SymbolSelector
+        value={selectedSymbol}
+        onChange={(symbol) => dispatch(setSelectedSymbol(symbol))}
+      />
+
       <IntervalSelector
         value={selectedInterval}
         onChange={(interval) =>
           dispatch(setSelectedInterval(interval))
         }
       />
+
+      {dateRangeControl}
 
       <section aria-label="Indicadores disponibles">
         <h2>Indicadores disponibles</h2>

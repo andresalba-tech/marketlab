@@ -4,16 +4,49 @@ import {
   loadIndicator,
 } from "./services/indicatorRegistry.js";
 import { getMarketFixture } from "./services/getMarketFixture.js";
+import { fixtureMarketDataProvider } from "./providers/fixtureMarketDataProvider.js";
+import { filterCandlesByRange } from "./services/filterCandlesByRange.js";
 
 export const app = express();
+
+function readDateRange(from: unknown, to: unknown) {
+  if (
+    (from !== undefined && typeof from !== "string") ||
+    (to !== undefined && typeof to !== "string")
+  ) {
+    throw new Error("from y to deben ser textos.");
+  }
+
+  // Valida el formato y que from no sea posterior a to.
+  filterCandlesByRange([], from, to);
+
+  return {
+    ...(from !== undefined ? { from } : {}),
+    ...(to !== undefined ? { to } : {}),
+  };
+}
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get("/api/market/:symbol", (req, res) => {
+app.get("/api/market/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const interval = req.query.interval ?? "1d";
+
+  let range: ReturnType<typeof readDateRange>;
+
+  try {
+    range = readDateRange(req.query.from, req.query.to);
+  } catch (error) {
+    res.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Rango temporal inválido.",
+    });
+    return;
+  }
 
   if (typeof interval !== "string") {
     res.status(400).json({
@@ -31,19 +64,28 @@ app.get("/api/market/:symbol", (req, res) => {
     return;
   }
 
-  if (symbol !== fixture.symbol) {
+  if (getMarketFixture(interval, symbol) === null) {
     res.status(404).json({
-      error: "La demo solo tiene datos de MSFT.",
+      error: "La demo solo tiene datos de MSFT y AAPL.",
     });
     return;
   }
 
-  res.json({
-    symbol,
-    interval: fixture.interval,
-    source: fixture.source,
-    candles: fixture.candles,
-  });
+  try {
+    const market = await fixtureMarketDataProvider.getMarket({
+      symbol,
+      interval,
+      ...range,
+    });
+
+    res.json(market);
+  } catch (error) {
+    console.error("No se pudieron obtener los precios:", error);
+
+    res.status(500).json({
+      error: "No se pudieron obtener los precios.",
+    });
+  }
 });
 
 app.get("/api/indicators", async (req, res) => {
@@ -131,6 +173,20 @@ app.get("/api/market/:symbol/indicators/:name", async (req, res) => {
     const name = req.params.name;
     const interval = req.query.interval ?? "1d";
 
+    let range: ReturnType<typeof readDateRange>;
+
+    try {
+      range = readDateRange(req.query.from, req.query.to);
+    } catch (error) {
+      res.status(400).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Rango temporal inválido.",
+      });
+      return;
+    }
+
     if (typeof interval !== "string") {
       res.status(400).json({
         error: "El intervalo debe ser un texto.",
@@ -147,9 +203,9 @@ app.get("/api/market/:symbol/indicators/:name", async (req, res) => {
       return;
     }
 
-    if (symbol !== fixture.symbol) {
+    if (getMarketFixture(interval, symbol) === null) {
       res.status(404).json({
-        error: "La demo solo tiene datos de MSFT.",
+        error: "La demo solo tiene datos de MSFT y AAPL.",
       });
       return;
     }
@@ -171,17 +227,42 @@ app.get("/api/market/:symbol/indicators/:name", async (req, res) => {
       return;
     }
 
-    const result = indicator.calculate({
-      candles: fixture.candles,
-      interval: fixture.interval,
+    // Obtenemos todo el historial para calcular correctamente.
+    const market = await fixtureMarketDataProvider.getMarket({
+      symbol,
+      interval,
     });
 
+    const result = indicator.calculate({
+      candles: market.candles,
+      interval: market.interval,
+    });
+
+    // Después seleccionamos las fechas que pidió el usuario.
+    const visibleCandles = filterCandlesByRange(
+      market.candles,
+      range.from,
+      range.to,
+    );
+
+    const visibleTimes = new Set(
+      visibleCandles.map((candle) => candle.time),
+    );
+
+    const series = result.series.map((series) => ({
+      ...series,
+      points: series.points.filter((point) =>
+        visibleTimes.has(point.time),
+      ),
+    }));
+
     res.json({
-      symbol,
-      interval: fixture.interval,
-      source: fixture.source,
+      symbol: market.symbol,
+      interval: market.interval,
+      source: market.source,
       indicator: name,
       ...result,
+      series,
     });
   } catch (error) {
     console.error("No se pudo calcular el indicador:", error);

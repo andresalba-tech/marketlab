@@ -34,32 +34,41 @@ type IndicatorResponse = {
   }[];
 };
 
-type IndicatorQuery = {
-  symbol: string;
-  name: string;
-  interval: string;
-};
-
 type MarketQuery = {
   symbol: string;
   interval: string;
+  from?: string;
+  to?: string;
+};
+
+type IndicatorQuery = MarketQuery & {
+  name: string;
 };
 
 export const marketApi = createApi({
     reducerPath: "marketApi",
     baseQuery: fetchBaseQuery({ baseUrl: "/api/" }),
     endpoints: (builder) => ({
+      
         getMarket: builder.query<MarketResponse, MarketQuery>({
-          query: ({ symbol, interval }) => ({
+          query: ({ symbol, interval, from, to }) => ({
             url: `market/${encodeURIComponent(symbol)}`,
-            params: { interval },
+            params: {
+              interval,
+              ...(from ? { from } : {}),
+              ...(to ? { to } : {}),
+            },
           }),
         }),
 
         getIndicator: builder.query<IndicatorResponse, IndicatorQuery>({
-          query: ({ symbol, name, interval }) => ({
+          query: ({ symbol, name, interval, from, to }) => ({
             url: `market/${encodeURIComponent(symbol)}/indicators/${encodeURIComponent(name)}`,
-            params: { interval },
+            params: {
+              interval,
+              ...(from ? { from } : {}),
+              ...(to ? { to } : {}),
+            },
           }),
         }),
 

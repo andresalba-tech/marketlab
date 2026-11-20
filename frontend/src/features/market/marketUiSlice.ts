@@ -7,6 +7,11 @@ const marketUiSlice = createSlice({
     showTable: true,
     selectedIndicator: "",
     selectedInterval: "1d",
+    selectedSymbol: "MSFT",
+    dateRange: {
+      from: "",
+      to: "",
+    },
   },
   reducers: {
     toggleTable(state) {
@@ -19,6 +24,15 @@ const marketUiSlice = createSlice({
       state.selectedInterval = action.payload;
       state.selectedIndicator = "";
     },
+    setSelectedSymbol(state, action: PayloadAction<string>) {
+      state.selectedSymbol = action.payload;
+    },
+    setDateRange(
+      state,
+      action: PayloadAction<{ from: string; to: string }>,
+    ) {
+      state.dateRange = action.payload;
+    },
   },
 });
 
@@ -26,5 +40,7 @@ export const {
   toggleTable,
   setSelectedIndicator,
   setSelectedInterval,
+  setSelectedSymbol,
+  setDateRange,
 } = marketUiSlice.actions;
 export default marketUiSlice.reducer;
