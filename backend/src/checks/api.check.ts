@@ -161,6 +161,81 @@ try {
     "SMA 200 con rango tardío debe conservar valores calculados, no null.",
   );
   assert.deepEqual(rangedPoints, lastThirty);
+    // Crear un backtest devuelve 201 y un ID.
+  const createBacktestResponse = await fetch(
+    `${baseUrl}/api/backtests`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        symbol: "MSFT",
+        interval: "1d",
+        strategy: {
+          name: "rsi2",
+          entryBelow: 10,
+          exitAbove: 70,
+        },
+        initialCapital: 10000,
+        commissionBps: 10,
+      }),
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(createBacktestResponse.status, 201);
+
+  const createdBacktest: unknown =
+    await createBacktestResponse.json();
+
+  assert.ok(
+    typeof createdBacktest === "object" &&
+      createdBacktest !== null &&
+      "id" in createdBacktest &&
+      typeof createdBacktest.id === "string" &&
+      createdBacktest.id.length > 0,
+    "El backtest creado debe contener un ID no vacío.",
+  );
+
+  const backtestId = createdBacktest.id;
+
+  assert.equal(
+    createBacktestResponse.headers.get("location"),
+    `/api/backtests/${backtestId}`,
+  );
+
+  // Recuperar el ID devuelve exactamente el resultado guardado.
+  const savedBacktestResponse = await fetch(
+    `${baseUrl}/api/backtests/${encodeURIComponent(backtestId)}`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(savedBacktestResponse.status, 200);
+
+  const savedBacktest: unknown =
+    await savedBacktestResponse.json();
+
+  assert.deepEqual(savedBacktest, createdBacktest);
+
+  // Un ID inexistente devuelve 404.
+  const missingBacktestResponse = await fetch(
+    `${baseUrl}/api/backtests/no-existe`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(missingBacktestResponse.status, 404);
+
+  const missingBacktestBody: unknown =
+    await missingBacktestResponse.json();
+
+  assert.deepEqual(missingBacktestBody, {
+    error: "Backtest no encontrado.",
+  });
 } finally {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {

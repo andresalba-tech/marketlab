@@ -6,8 +6,11 @@ import {
 import { getMarketFixture } from "./services/getMarketFixture.js";
 import { fixtureMarketDataProvider } from "./providers/fixtureMarketDataProvider.js";
 import { filterCandlesByRange } from "./services/filterCandlesByRange.js";
+import { backtestsRouter } from "./routes/backtests.js";
 
 export const app = express();
+
+app.use("/api/backtests", backtestsRouter);
 
 function readDateRange(from: unknown, to: unknown) {
   if (

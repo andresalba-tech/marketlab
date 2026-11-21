@@ -1,4 +1,8 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import type {
+  BacktestRequest,
+  BacktestResult,
+} from "./backtestTypes";
 
 export type Candle = {
   time: string;
@@ -78,6 +82,14 @@ export const marketApi = createApi({
             params: { interval },
           }),
         }),
+
+        runBacktest: builder.mutation<BacktestResult, BacktestRequest>({
+          query: (request) => ({
+            url: "backtests",
+            method: "POST",
+            body: request,
+          }),
+        }),
     }),
 });
 
@@ -85,4 +97,5 @@ export const {
   useGetMarketQuery,
   useGetIndicatorQuery,
   useGetIndicatorsQuery,
+  useRunBacktestMutation,
 } = marketApi;

@@ -20,6 +20,7 @@ import { buildChartData } from "./features/market/buildChartData";
 import { MarketStatus } from "./features/market/components/MarketStatus";
 import { SymbolSelector } from "./features/market/components/SymbolSelector";
 import { DateRangeSelector } from "./features/market/components/DateRangeSelector";
+import { BacktestPanel } from "./features/market/components/BacktestPanel";
 
 export default function App() {
     const dispatch = useAppDispatch();
@@ -303,6 +304,14 @@ export default function App() {
           domain={indicatorData.display.domain}
         />
       )}
+
+      <BacktestPanel
+        key={`${selectedSymbol}:${selectedInterval}:${dateRange.from}:${dateRange.to}`}
+        symbol={selectedSymbol}
+        interval={selectedInterval}
+        from={dateRange.from}
+        to={dateRange.to}
+      />
 
       <button type="button" onClick={() => dispatch(toggleTable())}>
         {showTable ? "Ocultar tabla" : "Mostrar tabla"}
