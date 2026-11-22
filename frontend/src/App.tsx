@@ -21,8 +21,9 @@ import { MarketStatus } from "./features/market/components/MarketStatus";
 import { SymbolSelector } from "./features/market/components/SymbolSelector";
 import { DateRangeSelector } from "./features/market/components/DateRangeSelector";
 import { BacktestPanel } from "./features/market/components/BacktestPanel";
+import { ChatPanel } from "./features/market/components/ChatPanel";
 
-export default function App() {
+function MarketDashboard() {
     const dispatch = useAppDispatch();
 
   const selectedSymbol = useAppSelector(
@@ -319,5 +320,14 @@ export default function App() {
 
       {showTable && <MarketTable candles={data.candles} />}
     </main>
+  );
+}
+
+export default function App() {
+  return (
+    <>
+      <MarketDashboard />
+      <ChatPanel />
+    </>
   );
 }

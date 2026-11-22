@@ -3,6 +3,7 @@ import type {
   BacktestRequest,
   BacktestResult,
 } from "./backtestTypes";
+import type { ChatMessage } from "./chatTypes";
 
 export type Candle = {
   time: string;
@@ -49,6 +50,11 @@ type IndicatorQuery = MarketQuery & {
   name: string;
 };
 
+type SendChatMessageRequest = {
+  sessionId: string;
+  text: string;
+};
+
 export const marketApi = createApi({
     reducerPath: "marketApi",
     baseQuery: fetchBaseQuery({ baseUrl: "/api/" }),
@@ -90,6 +96,17 @@ export const marketApi = createApi({
             body: request,
           }),
         }),
+
+        sendChatMessage: builder.mutation<
+          ChatMessage,
+          SendChatMessageRequest
+        >({
+          query: ({ sessionId, text }) => ({
+            url: `chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+            method: "POST",
+            body: { text },
+          }),
+      }),
     }),
 });
 
@@ -98,4 +115,5 @@ export const {
   useGetIndicatorQuery,
   useGetIndicatorsQuery,
   useRunBacktestMutation,
+  useSendChatMessageMutation,
 } = marketApi;

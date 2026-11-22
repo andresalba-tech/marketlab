@@ -1,6 +1,29 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { app } from "../app.js";
+import { createApp } from "../app.js";
+import type { LlmClient } from "../types/chat.js";
+
+let chatCompletions = 0;
+
+const mockChatClient: LlmClient = {
+  async complete(request) {
+    chatCompletions += 1;
+
+    const latest = request.messages.at(-1);
+
+    assert.ok(latest?.role === "user");
+    assert.equal(latest.text, "Hola MarketLab");
+
+    return {
+      text: "Hola. Estoy listo para analizar datos simulados.",
+      toolCalls: [],
+    };
+  },
+};
+
+const app = createApp({
+  llmClient: mockChatClient,
+});
 
 // El puerto 0 permite que el sistema elija uno disponible.
 const server = app.listen(0, "127.0.0.1");
@@ -236,6 +259,66 @@ try {
   assert.deepEqual(missingBacktestBody, {
     error: "Backtest no encontrado.",
   });
+
+  // 1. Un mensaje válido devuelve un ChatMessage.
+  const chatResponse = await fetch(
+    `${baseUrl}/api/chat/sessions/test-session/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: "Hola MarketLab",
+      }),
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(chatResponse.status, 200);
+
+  const chatBody: unknown = await chatResponse.json();
+
+  assert.ok(
+    typeof chatBody === "object" &&
+      chatBody !== null &&
+      "id" in chatBody &&
+      typeof chatBody.id === "string" &&
+      chatBody.id.length > 0,
+  );
+
+  assert.deepEqual(chatBody, {
+    id: chatBody.id,
+    role: "assistant",
+    status: "completed",
+    blocks: [
+      {
+        type: "markdown",
+        text: "Hola. Estoy listo para analizar datos simulados.",
+      },
+    ],
+    toolTraces: [],
+  });
+
+  assert.equal(chatCompletions, 1);
+
+  // 2. Un mensaje vacío devuelve 400 sin llamar al modelo.
+  const invalidChatResponse = await fetch(
+    `${baseUrl}/api/chat/sessions/test-session/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: "   ",
+      }),
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(invalidChatResponse.status, 400);
+  assert.equal(chatCompletions, 1);
 } finally {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
