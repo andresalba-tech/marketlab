@@ -2,8 +2,16 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createApp } from "../app.js";
 import type { LlmClient } from "../types/chat.js";
+import { generateReport } from "../agent/tools.js";
+import { getReport } from "../services/reportStore.js";
 
 let chatCompletions = 0;
+
+let notifyCancellationStarted: () => void = () => {};
+
+const cancellationStarted = new Promise<void>((resolve) => {
+  notifyCancellationStarted = resolve;
+});
 
 const mockChatClient: LlmClient = {
   async complete(request) {
@@ -12,6 +20,25 @@ const mockChatClient: LlmClient = {
     const latest = request.messages.at(-1);
 
     assert.ok(latest?.role === "user");
+
+    if (latest.text === "Prueba de cancelación HTTP") {
+      return new Promise<never>((_resolve, reject) => {
+        const onAbort = () => {
+          reject(new Error("Modelo falso cancelado."));
+        };
+
+        if (request.signal.aborted) {
+          onAbort();
+        } else {
+          request.signal.addEventListener("abort", onAbort, {
+            once: true,
+          });
+        }
+
+        notifyCancellationStarted();
+      });
+    }
+
     assert.equal(latest.text, "Hola MarketLab");
 
     return {
@@ -243,6 +270,85 @@ try {
 
   assert.deepEqual(savedBacktest, createdBacktest);
 
+  // Generar y descargar CSV y SVG del backtest creado.
+  for (const format of ["csv", "svg"] as const) {
+    const generatedReport = await generateReport({
+      backtestId,
+      format,
+    });
+
+    const storedReport = getReport(generatedReport.reportId);
+    assert.ok(storedReport);
+
+    const downloadResponse = await fetch(
+      `${baseUrl}${generatedReport.downloadUrl}`,
+      {
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+
+    assert.equal(downloadResponse.status, 200);
+
+    const expectedMimeType =
+      format === "svg" ? "image/svg+xml" : "text/csv";
+
+    assert.equal(
+      downloadResponse.headers.get("content-type"),
+      `${expectedMimeType}; charset=utf-8`,
+    );
+
+    const disposition =
+      downloadResponse.headers.get("content-disposition");
+
+    assert.ok(
+      disposition ===
+        `attachment; filename="${generatedReport.filename}"` ||
+      disposition ===
+        `attachment; filename=${generatedReport.filename}`,
+      `Content-Disposition inesperado: ${disposition}`,
+    );
+
+    assert.equal(
+      downloadResponse.headers.get("x-content-type-options"),
+      "nosniff",
+    );
+
+    const downloadedContent = await downloadResponse.text();
+
+    // Response.text() elimina el BOM UTF-8 inicial del CSV.
+    const expectedContent = storedReport.content.replace(/^\uFEFF/, "");
+
+    assert.equal(
+      downloadedContent,
+      expectedContent,
+      `La descarga ${format} debe coincidir con el reporte guardado.`,
+    );
+
+    if (format === "svg") {
+      assert.ok(downloadedContent.startsWith("<svg"));
+      assert.ok(downloadedContent.includes("-21.98 %"));
+      assert.ok(downloadedContent.includes("23.60 %"));
+      assert.ok(downloadedContent.includes("21.98 %"));
+      assert.ok(downloadedContent.includes("6.62 %"));
+    } else {
+      assert.ok(downloadedContent.includes('"netPnl"'));
+    }
+  }
+
+  // Descargar un reporte inexistente devuelve 404.
+  const missingReportResponse = await fetch(
+    `${baseUrl}/api/reports/no-existe/download`,
+    {
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(missingReportResponse.status, 404);
+  assert.deepEqual(await missingReportResponse.json(), {
+    error: "Reporte no encontrado.",
+  });
+
+
   // Un ID inexistente devuelve 404.
   const missingBacktestResponse = await fetch(
     `${baseUrl}/api/backtests/no-existe`,
@@ -285,6 +391,27 @@ try {
       "id" in chatBody &&
       typeof chatBody.id === "string" &&
       chatBody.id.length > 0,
+    "La respuesta debe contener un ID de mensaje.",
+  );
+
+  assert.ok(
+    "blocks" in chatBody && Array.isArray(chatBody.blocks),
+    "La respuesta debe contener un array de bloques.",
+  );
+
+  const chatTextBlock: unknown = chatBody.blocks[0];
+
+  assert.ok(
+    typeof chatTextBlock === "object" &&
+      chatTextBlock !== null &&
+      "id" in chatTextBlock &&
+      typeof chatTextBlock.id === "string",
+    "El primer bloque debe contener un ID.",
+  );
+
+  assert.equal(
+    chatTextBlock.id,
+    `${chatBody.id}-text`,
   );
 
   assert.deepEqual(chatBody, {
@@ -293,6 +420,7 @@ try {
     status: "completed",
     blocks: [
       {
+        id: `${chatBody.id}-text`,
         type: "markdown",
         text: "Hola. Estoy listo para analizar datos simulados.",
       },
@@ -319,6 +447,99 @@ try {
 
   assert.equal(invalidChatResponse.status, 400);
   assert.equal(chatCompletions, 1);
+  // Iniciamos un turno que permanecerá esperando al modelo falso.
+  const pendingMessage = fetch(
+    `${baseUrl}/api/chat/sessions/cancel-session/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: "Prueba de cancelación HTTP",
+      }),
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  // Si la petición termina o falla antes de arrancar el modelo,
+  // la prueba falla en vez de quedarse esperando indefinidamente.
+  await Promise.race([
+    cancellationStarted,
+    pendingMessage.then(() => {
+      throw new Error(
+        "La petición terminó antes de iniciar el modelo de cancelación.",
+      );
+    }),
+  ]);
+
+  const cancelResponse = await fetch(
+    `${baseUrl}/api/chat/sessions/cancel-session/cancel`,
+    {
+      method: "POST",
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(cancelResponse.status, 202);
+  assert.deepEqual(await cancelResponse.json(), {
+    cancellationRequested: true,
+  });
+
+  // La petición original debe terminar con el mensaje cancelado.
+  const cancelledResponse = await pendingMessage;
+  assert.equal(cancelledResponse.status, 200);
+
+  const cancelledBody: unknown = await cancelledResponse.json();
+
+  assert.ok(
+    typeof cancelledBody === "object" &&
+      cancelledBody !== null &&
+      "status" in cancelledBody &&
+      "blocks" in cancelledBody &&
+      Array.isArray(cancelledBody.blocks),
+  );
+
+  assert.equal(cancelledBody.status, "error");
+
+  assert.ok(
+    cancelledBody.blocks.some(
+      (block: unknown) =>
+        typeof block === "object" &&
+        block !== null &&
+        "type" in block &&
+        block.type === "error" &&
+        "code" in block &&
+        block.code === "TURN_CANCELLED",
+    ),
+  );
+
+  // El turno ya terminó: no queda una cancelación pendiente.
+  const idleCancelResponse = await fetch(
+    `${baseUrl}/api/chat/sessions/cancel-session/cancel`,
+    {
+      method: "POST",
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(idleCancelResponse.status, 200);
+  assert.deepEqual(await idleCancelResponse.json(), {
+    cancellationRequested: false,
+  });
+
+  const missingSessionResponse = await fetch(
+    `${baseUrl}/api/chat/sessions/missing-session/cancel`,
+    {
+      method: "POST",
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+
+  assert.equal(missingSessionResponse.status, 404);
+  await missingSessionResponse.json();
+
+  assert.equal(chatCompletions, 2);
 } finally {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {

@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch --env-file=.env src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc --noEmit",
     "test:sma": "tsx src/checks/sma200.check.ts",
     "test:rsi": "tsx src/checks/rsi2.check.ts",
@@ -16,7 +18,8 @@
     "test:registry": "tsx src/checks/indicatorRegistry.check.ts",
     "test:backtest": "tsx src/checks/backtest.check.ts",
     "test:agent": "tsx src/checks/agent.check.ts",
-    "test": "npm run typecheck && npm run test:sma && npm run test:rsi && npm run test:momentum && npm run test:vwap && npm run test:definition && npm run test:registry && npm run test:market && npm run test:api && npm run test:backtest && npm run test:agent"
+    "test:sse": "tsx src/checks/sse.check.ts",
+    "test": "npm run typecheck && npm run test:sma && npm run test:rsi && npm run test:momentum && npm run test:vwap && npm run test:definition && npm run test:registry && npm run test:market && npm run test:api && npm run test:backtest && npm run test:agent && npm run test:sse"
   },
   "keywords": [],
   "author": "",

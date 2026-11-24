@@ -10,6 +10,7 @@ import {
   getBacktest,
 } from "../services/backtestStore.js";
 import { saveReport } from "../services/reportStore.js";
+import { buildBacktestSvg } from "../services/buildBacktestSvg.js";
 
 export const calculateIndicatorsDefinition: ToolDefinition = {
   name: "calculateIndicators",
@@ -331,13 +332,21 @@ export async function compareStrategies(args: unknown) {
 export const generateReportDefinition: ToolDefinition = {
   name: "generateReport",
   description:
-    "Genera un CSV de las operaciones de un backtest ya guardado. " +
-    "Requiere su backtestId y devuelve un enlace de descarga.",
+    "Genera un reporte de un backtest ya guardado. " +
+    "El formato csv contiene sus operaciones; svg contiene un gráfico " +
+    "de retorno y drawdown frente al benchmark. " +
+    "Si no se indica formato, genera CSV. " +
+    "Requiere backtestId y devuelve un enlace de descarga.",
   parameters: {
     type: "object",
     properties: {
       backtestId: {
         type: "string",
+      },
+      format: {
+        type: "string",
+        enum: ["csv", "svg"],
+        description: "Formato del reporte. Por defecto: csv.",
       },
     },
     required: ["backtestId"],
@@ -359,7 +368,11 @@ export async function generateReport(args: unknown) {
     throw new Error("Los argumentos deben ser un objeto.");
   }
 
-  if (Object.keys(args).some((key) => key !== "backtestId")) {
+  if (
+    Object.keys(args).some(
+      (key) => key !== "backtestId" && key !== "format",
+    )
+  ) {
     throw new Error("El reporte contiene propiedades desconocidas.");
   }
 
@@ -371,52 +384,68 @@ export async function generateReport(args: unknown) {
     throw new Error("backtestId debe ser un texto no vacío.");
   }
 
+  const format = "format" in args ? args.format : "csv";
+
+  if (format !== "csv" && format !== "svg") {
+    throw new Error("format debe ser csv o svg.");
+  }
+
   const backtest = getBacktest(args.backtestId);
 
   if (backtest === undefined) {
     throw new Error("Backtest no encontrado.");
   }
 
-  const header = [
-    "entryTime",
-    "entryPrice",
-    "exitTime",
-    "exitPrice",
-    "quantity",
-    "entryCommission",
-    "exitCommission",
-    "netPnl",
-    "returnPct",
-    "exitReason",
-  ];
+  let content: string;
 
-  const rows = backtest.trades.map((trade) => [
-    trade.entryTime,
-    trade.entryPrice,
-    trade.exitTime,
-    trade.exitPrice,
-    trade.quantity,
-    trade.entryCommission,
-    trade.exitCommission,
-    trade.netPnl,
-    trade.returnPct,
-    trade.exitReason,
-  ]);
+  if (format === "svg") {
+    // Reutilizamos el mismo gráfico que mostramos en el chat.
+    content = buildBacktestSvg(backtest);
+  } else {
+    const header = [
+      "entryTime",
+      "entryPrice",
+      "exitTime",
+      "exitPrice",
+      "quantity",
+      "entryCommission",
+      "exitCommission",
+      "netPnl",
+      "returnPct",
+      "exitReason",
+    ];
 
-  const content =
-    "\uFEFF" +
-    [header, ...rows]
-      .map((row) => row.map(csvCell).join(","))
-      .join("\r\n") +
-    "\r\n";
+    const rows = backtest.trades.map((trade) => [
+      trade.entryTime,
+      trade.entryPrice,
+      trade.exitTime,
+      trade.exitPrice,
+      trade.quantity,
+      trade.entryCommission,
+      trade.exitCommission,
+      trade.netPnl,
+      trade.returnPct,
+      trade.exitReason,
+    ]);
+
+    content =
+      "\uFEFF" +
+      [header, ...rows]
+        .map((row) => row.map(csvCell).join(","))
+        .join("\r\n") +
+      "\r\n";
+  }
 
   const reportId = randomUUID();
-  const filename = `backtest-${backtest.id}.csv`;
+  const filename = `backtest-${backtest.id}.${format}`;
+  const mimeType =
+    format === "svg" ? "image/svg+xml" : "text/csv";
 
   saveReport({
     id: reportId,
     filename,
     content,
+    mimeType,
   });
 
   return {
@@ -424,8 +453,7 @@ export async function generateReport(args: unknown) {
     backtestId: backtest.id,
     filename,
     downloadUrl: `/api/reports/${reportId}/download`,
-    mimeType: "text/csv",
+    mimeType,
     tradeCount: backtest.trades.length,
   };
 }
-

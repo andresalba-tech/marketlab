@@ -14,6 +14,10 @@ reportsRouter.get("/:id/download", (req, res) => {
   }
 
   res.attachment(report.filename);
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Type",
+    `${report.mimeType}; charset=utf-8`,
+  );
+  res.setHeader("X-Content-Type-Options", "nosniff");
   res.send(report.content);
 });

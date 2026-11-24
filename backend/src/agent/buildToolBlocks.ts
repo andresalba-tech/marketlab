@@ -1,6 +1,7 @@
 import type { AgentBlock } from "../types/chat.js";
 import { getBacktest } from "../services/backtestStore.js";
 import { getReport } from "../services/reportStore.js";
+import { buildBacktestSvg } from "../services/buildBacktestSvg.js";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -17,6 +18,7 @@ function backtestTable(value: unknown): AgentBlock[] {
 
   return [
     {
+      id: `backtest-${result.id}-table`,
       type: "table",
       title:
         `Backtest ${result.request.symbol} · ${result.request.interval}` +
@@ -43,6 +45,37 @@ function backtestTable(value: unknown): AgentBlock[] {
         ],
         ["Operaciones cerradas", result.metrics.tradeCount, null],
         ["Ganadoras (%)", result.metrics.winRatePct, null],
+      ],
+    },
+    {
+      id: `backtest-${result.id}-svg`,
+      type: "svg",
+      title:
+        `Retorno y drawdown — ${result.request.symbol}` +
+        ` · ${result.request.interval}`,
+      content: buildBacktestSvg(result),
+    },
+    {
+      id: `backtest-${result.id}-chart`,
+      type: "chart",
+      title:
+        `Evolución del capital — ${result.request.symbol}` +
+        ` · ${result.request.interval}`,
+      series: [
+        {
+          name: "RSI 2",
+          points: result.equityCurve.map((point) => ({
+            time: point.time,
+            value: point.equity,
+          })),
+        },
+        {
+          name: "Comprar y mantener",
+          points: result.benchmark.equityCurve.map((point) => ({
+            time: point.time,
+            value: point.equity,
+          })),
+        },
       ],
     },
   ];
@@ -75,11 +108,12 @@ export function buildToolBlocks(
 
     return [
       {
+        id: `report-${report.id}-file`,
         type: "file",
         reportId: report.id,
         filename: report.filename,
         downloadUrl: `/api/reports/${report.id}/download`,
-        mimeType: "text/csv",
+        mimeType: report.mimeType,
       },
     ];
   }

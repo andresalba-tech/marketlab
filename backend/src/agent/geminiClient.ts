@@ -103,7 +103,7 @@ export function createGeminiClient(): LlmClient {
 
   return {
     async complete(request) {
-      const response = await client.models.generateContent({
+      const parameters = {
         model,
         contents: toContents(request.messages),
         config: {
@@ -119,12 +119,60 @@ export function createGeminiClient(): LlmClient {
             },
           ],
         },
-      });
+      };
 
-      const content = response.candidates?.[0]?.content;
+      let content: Content;
 
-      if (!content) {
-        throw new Error("Gemini no devolvió contenido.");
+      if (request.onTextDelta) {
+        const parts: Part[] = [];
+
+        const stream = await client.models.generateContentStream(
+          parameters,
+        );
+
+        for await (const chunk of stream) {
+          request.signal.throwIfAborted();
+
+          const chunkContent = chunk.candidates?.[0]?.content;
+
+          for (const part of chunkContent?.parts ?? []) {
+            // Conservamos las partes originales, incluidas firmas
+            // y llamadas a herramientas, para reconstruir el historial.
+            parts.push(structuredClone(part));
+
+            // Solo enviamos al usuario texto visible.
+            if (
+              !part.thought &&
+              typeof part.text === "string" &&
+              part.text.length > 0
+            ) {
+              request.onTextDelta(part.text);
+            }
+          }
+        }
+
+        request.signal.throwIfAborted();
+
+        if (parts.length === 0) {
+          throw new Error("Gemini no devolvió contenido.");
+        }
+
+        content = {
+          role: "model",
+          parts,
+        };
+      } else {
+        const response = await client.models.generateContent(
+          parameters,
+        );
+
+        const responseContent = response.candidates?.[0]?.content;
+
+        if (!responseContent) {
+          throw new Error("Gemini no devolvió contenido.");
+        }
+
+        content = responseContent;
       }
 
       const toolCalls: LlmToolCall[] = [];

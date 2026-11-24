@@ -6,6 +6,7 @@ import type {
   ToolResult,
   ToolTrace,
   AgentBlock,
+  AgentTurnEvent,
 } from "../types/chat.js";
 import {
   toolRegistry,
@@ -21,6 +22,8 @@ type AgentOptions = {
   toolTimeoutMs?: number;
   llmTimeoutMs?: number;
   maxPayloadBytes?: number;
+  signal?: AbortSignal;
+  onEvent?: (event: AgentTurnEvent) => void;
 };
 
 type AgentTurnResult = {
@@ -44,26 +47,57 @@ No presentes las señales de la demo como recomendaciones de inversión.
 `;
 
 class DeadlineError extends Error {}
+class TurnCancelledError extends Error {}
 
 async function withTimeout<T>(
   operation: () => Promise<T>,
   milliseconds: number,
-  onTimeout: () => void = () => {},
+  onStop: () => void = () => {},
+  signal?: AbortSignal,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
 
   try {
+    if (signal?.aborted) {
+      onStop();
+      throw new TurnCancelledError("Turno cancelado.");
+    }
+
+    const interruption = new Promise<never>((_, reject) => {
+      abortListener = () => {
+        reject(new TurnCancelledError("Turno cancelado."));
+        onStop();
+      };
+
+      signal?.addEventListener("abort", abortListener, {
+        once: true,
+      });
+
+      timer = setTimeout(() => {
+        reject(new DeadlineError("Tiempo de espera agotado."));
+        onStop();
+      }, milliseconds);
+    });
+
     return await Promise.race([
-      Promise.resolve().then(operation),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new DeadlineError("Tiempo de espera agotado."));
-          onTimeout();
-        }, milliseconds);
+      interruption,
+      Promise.resolve().then(() => {
+        if (signal?.aborted) {
+          throw new TurnCancelledError("Turno cancelado.");
+        }
+
+        return operation();
       }),
     ]);
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+
+    if (abortListener !== undefined) {
+      signal?.removeEventListener("abort", abortListener);
+    }
   }
 }
 
@@ -82,7 +116,7 @@ function traceArgs(value: unknown, depth = 0): Record<string, unknown> {
     "symbol", "interval", "indicator", "from", "to",
     "initialCapital", "commissionBps", "backtestId",
     "strategy", "name", "entryBelow", "exitAbove",
-    "first", "second",
+    "first", "second", "format",
   ]);
 
   const result: Record<string, unknown> = {};
@@ -114,6 +148,8 @@ export async function runAgentTurn({
   toolTimeoutMs = 5000,
   llmTimeoutMs = 30000,
   maxPayloadBytes = 16000,
+  onEvent,
+  signal,
 }: AgentOptions): Promise<AgentTurnResult> {
   if (
     !Number.isInteger(maxToolCalls) ||
@@ -131,7 +167,14 @@ export async function runAgentTurn({
   const messages = structuredClone(history);
   const traces: ToolTrace[] = [];
   const generatedBlocks: AgentBlock[] = [];
+  const messageId = randomUUID();
   let calls = 0;
+
+  onEvent?.({
+    messageId,
+    type: "message.started",
+    payload: { role: "assistant" },
+  });
 
   function finish(
     text: string,
@@ -143,26 +186,55 @@ export async function runAgentTurn({
       toolCalls: [],
     });
 
+    const finalBlock: AgentBlock = errorCode
+      ? {
+          id: `${messageId}-error`,
+          type: "error",
+          code: errorCode,
+          message: text,
+        }
+      : {
+          id: `${messageId}-text`,
+          type: "markdown",
+          text,
+        };
+
+    const message: ChatMessage = {
+      id: messageId,
+      role: "assistant",
+      status: errorCode ? "error" : "completed",
+      blocks: [...generatedBlocks, finalBlock],
+      toolTraces: traces,
+    };
+
+    // Los bloques de herramientas ya se entregaron al generarse.
+    // Aquí entregamos únicamente el texto final o el error.
+    onEvent?.({
+      messageId,
+      type: "block.ready",
+      payload: { block: finalBlock },
+    });
+
+    if (errorCode) {
+      onEvent?.({
+        messageId,
+        type: "message.failed",
+        payload: {
+          message,
+          code: errorCode,
+          cancelled: errorCode === "TURN_CANCELLED",
+        },
+      });
+    } else {
+      onEvent?.({
+        messageId,
+        type: "message.completed",
+        payload: { message },
+      });
+    }
+
     return {
-      message: {
-        id: randomUUID(),
-        role: "assistant",
-        status: errorCode ? "error" : "completed",
-        blocks: [
-          ...generatedBlocks,
-          ...(errorCode
-            ? [{
-                type: "error" as const,
-                code: errorCode,
-                message: text,
-              }]
-            : [{
-                type: "markdown" as const,
-                text,
-              }]),
-        ],
-        toolTraces: traces,
-      },
+      message,
       history: messages,
     };
   }
@@ -170,6 +242,8 @@ export async function runAgentTurn({
   // Como máximo: cinco rondas con herramientas y una respuesta final.
   for (let round = 0; round <= maxToolCalls; round += 1) {
     const controller = new AbortController();
+    const streamingBlockId = `${messageId}-stream-${round}`;
+    let acceptingText = true;
 
     let completion;
 
@@ -181,11 +255,43 @@ export async function runAgentTurn({
             messages: structuredClone(messages),
             tools: [...tools.values()].map((tool) => tool.definition),
             signal: controller.signal,
+            ...(onEvent
+              ? {
+                  onTextDelta: (delta: string) => {
+                    if (
+                      !acceptingText ||
+                      controller.signal.aborted ||
+                      signal?.aborted ||
+                      delta.length === 0
+                    ) {
+                      return;
+                    }
+
+                    onEvent({
+                      messageId,
+                      type: "text.delta",
+                      payload: {
+                        blockId: streamingBlockId,
+                        delta,
+                      },
+                    });
+                  },
+                }
+              : {}),
           }),
         llmTimeoutMs,
         () => controller.abort(),
+        signal,
       );
+
+      if (signal?.aborted) {
+        return finish("El turno fue cancelado.", "TURN_CANCELLED");
+      }
     } catch (error) {
+      if (error instanceof TurnCancelledError || signal?.aborted) {
+        return finish("El turno fue cancelado.", "TURN_CANCELLED");
+      }
+
       return finish(
         error instanceof DeadlineError
           ? "El modelo tardó demasiado en responder."
@@ -230,7 +336,34 @@ export async function runAgentTurn({
     });
 
     for (const call of completion.toolCalls) {
+      // Respondemos a las llamadas pendientes sin ejecutarlas.
+      if (signal?.aborted) {
+        messages.push({
+          role: "tool",
+          toolCallId: call.id,
+          toolName: call.name,
+          result: {
+            ok: false,
+            error: {
+              code: "TURN_CANCELLED",
+              message: "La herramienta no se ejecutó: turno cancelado.",
+            },
+          },
+        });
+
+        continue;
+      }
+
       calls += 1;
+
+      onEvent?.({
+        messageId,
+        type: "tool.started",
+        payload: {
+          toolCallId: call.id,
+          toolName: call.name,
+        },
+      });
 
       const start = performance.now();
       const tool = tools.get(call.name);
@@ -249,7 +382,13 @@ export async function runAgentTurn({
           const data = await withTimeout(
             () => tool.execute(call.arguments),
             toolTimeoutMs,
+            () => {},
+            signal,
           );
+
+          if (signal?.aborted) {
+            throw new TurnCancelledError("Turno cancelado.");
+          }
 
           const serialized = JSON.stringify(data);
 
@@ -268,40 +407,76 @@ export async function runAgentTurn({
             result = { ok: true, data };
           }
         } catch (error) {
-          result = {
-            ok: false,
-            error: {
-              code:
-                error instanceof DeadlineError
-                  ? "TOOL_TIMEOUT"
-                  : "TOOL_ERROR",
-              message:
-                error instanceof DeadlineError
-                  ? "La herramienta excedió el tiempo permitido."
-                  : "No se pudo ejecutar la herramienta. Revisa sus argumentos y la disponibilidad de los datos.",
-            },
-          };
+          if (error instanceof TurnCancelledError || signal?.aborted) {
+            result = {
+              ok: false,
+              error: {
+                code: "TURN_CANCELLED",
+                message:
+                  "Se canceló la espera del resultado de la herramienta.",
+              },
+            };
+          } else {
+            result = {
+              ok: false,
+              error: {
+                code:
+                  error instanceof DeadlineError
+                    ? "TOOL_TIMEOUT"
+                    : "TOOL_ERROR",
+                message:
+                  error instanceof DeadlineError
+                    ? "La herramienta excedió el tiempo permitido."
+                    : "No se pudo ejecutar la herramienta. Revisa sus argumentos y la disponibilidad de los datos.",
+              },
+            };
+          }
         }
       }
 
-      if (result.ok) {
-        generatedBlocks.push(...buildToolBlocks(call.name, result.data));
-      }
-
-      traces.push({
+      const trace: ToolTrace = {
         toolName: call.name,
         args: traceArgs(call.arguments),
         ok: result.ok,
         durationMs: performance.now() - start,
         ...(!result.ok ? { error: result.error } : {}),
+      };
+
+      traces.push(trace);
+
+      onEvent?.({
+        messageId,
+        type: "tool.completed",
+        payload: {
+          toolCallId: call.id,
+          trace,
+        },
       });
 
-      messages.push({
+      if (result.ok) {
+        const blocks = buildToolBlocks(call.name, result.data);
+
+        generatedBlocks.push(...blocks);
+
+        for (const block of blocks) {
+          onEvent?.({
+            messageId,
+            type: "block.ready",
+            payload: { block },
+          });
+        }
+      }
+
+  messages.push({
         role: "tool",
         toolCallId: call.id,
         toolName: call.name,
         result,
       });
+    }
+
+    if (signal?.aborted) {
+      return finish("El turno fue cancelado.", "TURN_CANCELLED");
     }
   }
 
